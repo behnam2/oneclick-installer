@@ -2,12 +2,13 @@ version: "3"
 
 services:
   v2ray:
-    image: ghcr.io/getimages/v2fly-core:v4.45.2
+    container_name: Name
+    image: b3hnam/v2ray:v4.45.2
     restart: always
     environment:
       - v2ray.vmess.aead.forced=false
     ports:
-      - "1310:1310"
+      - "Uport:Uport"
     volumes:
-      - ./v2ray/config/:/etc/v2ray/
+      - ./config/:/etc/v2ray/
       - ./logs:/var/log/v2ray/

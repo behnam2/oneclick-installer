@@ -7,12 +7,12 @@
   "inbounds": [
     {
       "listen": "0.0.0.0",
-      "port": 1310,
+      "port": UPSTREAM-PORT,
       "protocol": "vmess",
       "settings": {
         "clients": [
           {
-            "id": "<UPSTREAM-UUID>",
+            "id": "UPSTREAM-UUID",
             "alterId": 0,
             "security": "auto"
           }

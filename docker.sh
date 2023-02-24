@@ -47,7 +47,7 @@ select option in Install_Docker Install_SoftEther Install_v2ray Exit; do
 				echo "Install Docker First!"
 				exit 1
 			fi
-			select role in Bridge-server Upstream-server; do
+			select role in Bridge-server Upstream-server Exit; do
 				case $role in
 				"Bridge-server")
 					sudocheck
@@ -67,6 +67,22 @@ select option in Install_Docker Install_SoftEther Install_v2ray Exit; do
 					sed -i "s/UPSTREAM-UUID/$UPuuid/g" ./config/config.json
 					docker-compose up -d
 					python3 clients.py
+					;;
+				"Exit")
+					echo "Have a nice day :)"
+						exit 1
+					;;
+				"Upstream-server")
+					sudocheck
+					read -p "Enter Your UpstreamUUID: " UPuuid
+					read -p "Enter Your Upstream Port: " Uport
+					read -p "Server name: " name
+					cd  ./v2ray/v2ray-upstream-server
+					sed -i "s/Uport/$Uport/g" docker-compose.yml
+					sed -i "s/Name/$name/g" docker-compose.yml
+					sed -i "s/UPSTREAM-PORT/$Uport/g" ./config/config.json
+					sed -i "s/UPSTREAM-UUID/$UPuuid/g" ./config/config.json
+					docker-compose up -d
 					;;
 				esac
 			done
