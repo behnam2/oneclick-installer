@@ -57,7 +57,7 @@ select option in Install_Docker Install_SoftEther Install_v2ray Exit; do
 					read -p "Enter Your UpstreamUUID: " UPuuid
 					read -p "Enter Your Bridge Port: " Bport
 					read -p "Server name: " name
-					cd  ./Install-Docker/v2ray/v2ray-docker-compose/v2ray-bridge-server
+					cd  ./Install-Docker/v2ray/v2ray-bridge-server
 					sed -i "s/Bport/$Bport/g" docker-compose.yml
 					sed -i "s/Name/$name/g" docker-compose.yml
 					sed -i "s/BRIDGE-PORT/$Bport/g" ./config/config.json
