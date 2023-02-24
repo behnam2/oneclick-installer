@@ -57,13 +57,13 @@ select option in Install_Docker Install_SoftEther Install_v2ray Exit; do
 					read -p "Enter Your UpstreamUUID: " UPuuid
 					read -p "Enter Your Bridge Port: " Bport
 					read -p "Server name: " name
-					cd  ./Install-Docker/v2ray/v2ray-bridge-server
+					cd  ./v2ray/v2ray-bridge-server
 					sed -i "s/Bport/$Bport/g" docker-compose.yml
 					sed -i "s/Name/$name/g" docker-compose.yml
 					sed -i "s/BRIDGE-PORT/$Bport/g" ./config/config.json
 					sed -i "s/UPSTREAM-IP/$UIP/g" ./config/config.json
 					sed -i "s/UPSTREAM-PORT/$Uport/g" ./config/config.json
-					sed -i "s/BRIDGE-UUID/$(echo uuidgen)/g" ./config/config.json
+					sed -i "s/BRIDGE-UUID/$(uuidgen)/g" ./config/config.json
 					sed -i "s/UPSTREAM-UUID/$UPuuid/g" ./config/config.json
 					docker-compose up -d
 					python3 clients.py
