@@ -1,0 +1,14 @@
+version: "3"
+
+services:
+  v2ray:
+    container_name: Name
+    image: b3hnam/v2ray:v4.45.2
+    restart: always
+    environment:
+      - v2ray.vmess.aead.forced=false
+    ports:
+      - "Bport:Bport"
+    volumes:
+      - ./config/:/etc/v2ray/
+      - ./logs:/var/log/v2ray/

@@ -1,7 +1,14 @@
 #!/usr/bin/bash
 
 set -e
-select option in Install_Docker Install_SoftEther Install_V2ray Exit; do
+function sudocheck {
+user=$(whoami)
+if [ "$user" != "root" ]; then
+echo "Use Sudo su"
+exit 1
+fi
+}
+select option in Install_Docker Install_SoftEther Install_v2ray Exit; do
 	case $option in
 		"Install_Docker")
 #check linux version
@@ -12,11 +19,7 @@ select option in Install_Docker Install_SoftEther Install_V2ray Exit; do
 			echo "You can Just use Ubuntu"
 			fi
 #check user
-			user=$(whoami)
-			if [ "$user" != "root" ]; then
-			echo "Use Sudo su"
-			exit 1
-			fi
+		sudocheck
 #Update apt & Install dependency
 			apt-get update && apt-get install \
 				ca-certificates \
@@ -38,10 +41,37 @@ select option in Install_Docker Install_SoftEther Install_V2ray Exit; do
 			echo "Have a nice day :)"
 			exit 1
 			;;
+		"Install_v2ray")
+			which docker > /dev/null
+			if [ $(echo $?) -ne 0 ]; then
+				echo "Install Docker First!"
+				exit 1
+			fi
+			select role in Bridge-server Upstream-server; do
+				case $role in
+				"Bridge-server")
+					sudocheck
+					sed -i '1 i\nameserver 178.22.122.100' /etc/resolv.conf
+					read -p "Enter Your Upstream IP: " UIP
+					read -p "Enter Your Upstream Port: " Uport
+					read -p "Enter Your UpstreamUUID: " UPuuid
+					read -p "Enter Your Bridge Port: " Bport
+					read -p "Server name: " name
+					cd  ./Install-Docker/v2ray/v2ray-docker-compose/v2ray-bridge-server
+					sed -i "s/Bport/$Bport/g" docker-compose.yml
+					sed -i "s/Name/$name/g" docker-compose.yml
+					sed -i "s/BRIDGE-PORT/$Bport/g" ./config/config.json
+					sed -i "s/UPSTREAM-IP/$UIP/g" ./config/config.json
+					sed -i "s/UPSTREAM-PORT/$Uport/g" ./config/config.json
+					sed -i "s/BRIDGE-UUID/$(echo uuidgen)/g" ./config/config.json
+					sed -i "s/UPSTREAM-UUID/$UPuuid/g" ./config/config.json
+					docker-compose up -d
+					python3 clients.py
+					;;
+				esac
+			done
 esac
-done		
-
-
+done
 
 
 
