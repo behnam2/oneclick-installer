@@ -7,7 +7,7 @@ from pathlib import Path
 from urllib.request import urlopen
 
 path = Path(__file__).parent
-file = open(str(path.joinpath('v2ray/config/config.json')), 'r', encoding='utf-8')
+file = open(str(path.joinpath('config/config.json')), 'r', encoding='utf-8')
 config = json.load(file)
 
 ip = urlopen("https://ipv4.icanhazip.com/").read().decode().rstrip()
