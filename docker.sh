@@ -51,8 +51,8 @@ select option in Install_Docker Install_SoftEther Install_v2ray Exit; do
 			chmod 600 *
 			chmod 700 vpnserver
 			chmod 700 vpncmd
-			/etc/init.d/vpnserver < cat service
-
+			touch /etc/init.d/vpnserver
+			cat service > /etc/init.d/vpnserver
 			mkdir /var/lock/subsys
 			chmod 755 /etc/init.d/vpnserver
 			/etc/init.d/vpnserver start
