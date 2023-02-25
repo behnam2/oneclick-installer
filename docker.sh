@@ -37,6 +37,27 @@ select option in Install_Docker Install_SoftEther Install_v2ray Exit; do
 			apt-get update
 			apt-get install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin docker-compose -y
 				;;
+				"Install_SoftEther")
+			sudocheck
+			apt-get update -y
+			apt-get install build-essential gnupg2 gcc make -y
+			wget http://www.softether-download.com/files/softether/v4.38-9760-rtm-2021.08.17-tree/Linux/SoftEther_VPN_Server/64bit_-_Intel_x64_or_AMD64/softether-vpnserver-v4.38-9760-rtm-2021.08.17-linux-x64-64bit.tar.gz
+			tar -xvzf softether-vpnserver-v4.38-9760-rtm-2021.08.17-linux-x64-64bit.tar.gz
+			cd vpnserver
+			make
+			cd ..
+			mv vpnserver /usr/local/
+			cd /usr/local/vpnserver/
+			chmod 600 *
+			chmod 700 vpnserver
+			chmod 700 vpncmd
+			/etc/init.d/vpnserver < cat service
+
+			mkdir /var/lock/subsys
+			chmod 755 /etc/init.d/vpnserver
+			/etc/init.d/vpnserver start
+			update-rc.d vpnserver defaults
+				;;
 		"Exit")
 			echo "Have a nice day :)"
 			exit 1
@@ -86,7 +107,7 @@ select option in Install_Docker Install_SoftEther Install_v2ray Exit; do
 					;;
 				esac
 			done
-esac
+	esac
 done
 
 
