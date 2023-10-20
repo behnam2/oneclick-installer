@@ -10,7 +10,7 @@ function sudocheck {
 }
 
 function os_version_check {
-    			 if grep -i 20.04 /etc/os-release > /dev/null; then
+    			 if trash=$(grep -i 20.04 /etc/os-release 2>&1); then
                           echo "Your Distro Ubuntu 20.04"
                           else
                           echo "You don't use Ubuntu 20.04 and may have problem in this script do you want to continue?"
