@@ -9,6 +9,7 @@ A single interactive Bash script to set up your own VPN server with one command 
 | **Docker** | Full Docker Engine + Compose plugin (with an optional DNS workaround for servers located in Iran) |
 | **SoftEther VPN** | SoftEther VPN Server (x86_64), compiled and installed as a systemd service |
 | **v2ray** | Containerized V2Ray in two roles: **Bridge** (entry server, e.g. in Iran) and **Upstream** (exit server abroad) |
+| **Squid Proxy** | Containerized Squid forward proxy with basic auth, IP allowlist and optional upstream chaining |
 
 ## Requirements
 
@@ -31,7 +32,8 @@ Then pick an option from the menu:
 1) Install Docker
 2) Install SoftEther
 3) Install v2ray
-4) Exit
+4) Install Squid Proxy
+5) Exit
 ```
 
 ## v2ray: Bridge & Upstream Architecture
@@ -76,6 +78,32 @@ docker compose logs -f
 docker compose restart
 docker compose down
 ```
+
+## Squid Proxy (HTTP/SOCKS forward proxy with auth)
+
+Choose **Install Squid Proxy** to deploy the [squid-proxy-auth](https://github.com/behnam2/squid-proxy-auth) container. The script asks for:
+
+- **Username / password** — proxy authentication
+- **Listen port** — default `3128`
+- **Instance name** — configs are written to `squid/<name>/`
+- **Allowed IPs** (optional) — comma-separated source IPs that skip authentication
+- **Upstream cache_peer** (optional) — chain through another proxy, e.g. `203.0.113.5 3128`, with an option to force **all** traffic through it
+
+Example after setup:
+
+```bash
+curl -x http://myuser:mypass@<server>:3128 https://example.com
+```
+
+Manage it like any compose project:
+
+```bash
+cd squid/squidproxy
+docker compose logs -f
+docker compose down
+```
+
+The generated `.env` file (mode `600`) contains your credentials — keep it private.
 
 ## Notes & Security
 

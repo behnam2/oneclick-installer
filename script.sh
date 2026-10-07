@@ -211,15 +211,91 @@ function install_v2ray {
 	done
 }
 
+function install_squid {
+	sudocheck
+
+	if ! command -v docker &> /dev/null; then
+		echo "Docker is not installed. Please install Docker first (option 1)."
+		return 1
+	fi
+	if ! docker compose version &> /dev/null; then
+		echo "docker compose plugin not found. Please install Docker first (option 1)."
+		return 1
+	fi
+
+	read -r -p "Proxy username: " PROXY_USERNAME
+	read -r -p "Proxy password: " PROXY_PASSWORD
+	read -r -p "Listen port [3128]: " PROXY_PORT
+	PROXY_PORT="${PROXY_PORT:-3128}"
+	read -r -p "Instance name [squidproxy]: " name
+	name="${name:-squidproxy}"
+	read -r -p "Allowed IPs without auth (comma-separated, empty for none): " ALLOWED_IPS
+	read -r -p "Upstream cache_peer (e.g. '203.0.113.5 3128', empty for none): " CACHE_PEER
+
+	local never_direct=""
+	if [ -n "$CACHE_PEER" ]; then
+		read -r -p "Force ALL traffic through the peer? [y/N]: " nd
+		nd="${nd,,}"
+		[ "$nd" = "y" ] || [ "$nd" = "yes" ] && never_direct="1"
+	fi
+
+	local dir="$SCRIPT_DIR/squid/$name"
+	mkdir -p "$dir"
+
+	{
+		echo "PROXY_USERNAME=$PROXY_USERNAME"
+		echo "PROXY_PASSWORD=$PROXY_PASSWORD"
+		echo "PROXY_PORT=$PROXY_PORT"
+		echo "CONTAINER_NAME=$name"
+		echo "CACHE_VOLUME_NAME=$name-cache"
+		[ -n "$ALLOWED_IPS" ] && echo "ALLOWED_IPS=$ALLOWED_IPS"
+		[ -n "$CACHE_PEER" ] && echo "CACHE_PEER=$CACHE_PEER"
+		[ -n "$never_direct" ] && echo "CACHE_PEER_NEVER_DIRECT=1"
+	} > "$dir/.env"
+	chmod 600 "$dir/.env"
+
+	cat << 'EOF' > "$dir/docker-compose.yml"
+services:
+  squid:
+    image: b3hnam/squid-proxy-auth:latest
+    container_name: ${CONTAINER_NAME}
+    restart: unless-stopped
+    ports:
+      - "${PROXY_PORT}:3128"
+    environment:
+      PROXY_USERNAME: ${PROXY_USERNAME}
+      PROXY_PASSWORD: ${PROXY_PASSWORD}
+      ALLOWED_IPS: ${ALLOWED_IPS:-}
+      CACHE_PEER: ${CACHE_PEER:-}
+      CACHE_PEER_NEVER_DIRECT: ${CACHE_PEER_NEVER_DIRECT:-}
+    volumes:
+      - squid-cache:/var/spool/squid
+
+volumes:
+  squid-cache:
+    name: ${CACHE_VOLUME_NAME}
+EOF
+
+	pushd "$dir" > /dev/null
+	docker compose up -d
+	popd > /dev/null
+
+	echo ""
+	echo "Squid proxy '$name' is up on port $PROXY_PORT!"
+	echo "Test it:  curl -x http://$PROXY_USERNAME:****@<this-server>:$PROXY_PORT https://example.com"
+	echo "Manage:   cd $dir && docker compose logs -f"
+}
+
 # --- Main menu ---
 echo "=== OneClick Installer ==="
 while true; do
-	select option in "Install Docker" "Install SoftEther" "Install v2ray" "Exit"; do
+	select option in "Install Docker" "Install SoftEther" "Install v2ray" "Install Squid Proxy" "Exit"; do
 		case $REPLY in
 			1) install_docker; break ;;
 			2) install_softether; break ;;
 			3) install_v2ray; break ;;
-			4) echo "Have a nice day :)"; exit 0 ;;
+			4) install_squid; break ;;
+			5) echo "Have a nice day :)"; exit 0 ;;
 			*) echo "Invalid option." ;;
 		esac
 	done
