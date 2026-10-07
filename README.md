@@ -58,7 +58,7 @@ Client → Bridge server (VMESS/SOCKS/HTTP/Shadowsocks) → Upstream server (VME
 
 Choose **Install v2ray → Upstream-server**. You'll be asked for:
 
-- **Upstream UUID** — a shared secret; generate one with `uuidgen` (save it, the bridge needs it)
+- **Upstream UUID** — leave empty to auto-generate a random one (printed at the end; save it, the bridge needs it)
 - **Upstream port** — the port VMESS listens on (e.g. `443`)
 - **Instance name** — a label; configs are written to `v2ray/v2ray-upstream-<name>/`
 
@@ -66,7 +66,7 @@ Choose **Install v2ray → Upstream-server**. You'll be asked for:
 
 Choose **Install v2ray → Bridge-server**. You'll be asked for:
 
-- **Upstream IP / port / UUID** — from step 1
+- **Upstream IP / port / UUID** — from step 1 (leave UUID empty to auto-generate; must match the upstream if you set one manually)
 - **Bridge port** — the VMESS port clients connect to
 - **Instance name** — configs are written to `v2ray/v2ray-bridge-<name>/`
 

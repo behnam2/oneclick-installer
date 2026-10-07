@@ -139,23 +139,25 @@ function install_v2ray_bridge {
 
 	read -r -p "Enter your upstream server IP: " UIP
 	read -r -p "Enter your upstream server port: " Uport
-	read -r -p "Enter your upstream UUID: " UPuuid
+	read -r -p "Enter your upstream UUID (empty = generate random): " UPuuid
+	UPuuid="${UPuuid:-$(uuidgen)}"
 	read -r -p "Enter your bridge listen port: " Bport
 	read -r -p "Instance name: " name
 
 	local dir="$SCRIPT_DIR/v2ray/v2ray-bridge-$name"
 	cp -r "$SCRIPT_DIR/v2ray/v2ray-bridge-server" "$dir"
 
-	# Generate random shadowsocks password
-	local ss_pass
+	# Generate random secrets
+	local ss_pass bridge_uuid
 	ss_pass="$(openssl rand -base64 16 | tr -dc 'a-zA-Z0-9' | head -c 16)"
+	bridge_uuid="$(uuidgen)"
 
 	sed -i "s/Bport/$Bport/g" "$dir/docker-compose.yml"
 	sed -i "s/Name/$name/g" "$dir/docker-compose.yml"
 	sed -i "s/BRIDGE-PORT/$Bport/g" "$dir/config/config.json"
 	sed -i "s/UPSTREAM-IP/$UIP/g" "$dir/config/config.json"
 	sed -i "s/UPSTREAM-PORT/$Uport/g" "$dir/config/config.json"
-	sed -i "s/BRIDGE-UUID/$(uuidgen)/g" "$dir/config/config.json"
+	sed -i "s/BRIDGE-UUID/$bridge_uuid/g" "$dir/config/config.json"
 	sed -i "s/UPSTREAM-UUID/$UPuuid/g" "$dir/config/config.json"
 	sed -i "s/<SHADOWSOCKS-PASSWORD>/$ss_pass/g" "$dir/config/config.json"
 
@@ -164,13 +166,19 @@ function install_v2ray_bridge {
 	python3 clients.py
 	popd > /dev/null
 
+	echo ""
 	echo "Bridge server '$name' is up! Config saved to: $dir"
+	echo "  Bridge UUID (clients):      $bridge_uuid"
+	echo "  Upstream UUID:              $UPuuid"
+	echo "  Shadowsocks password:       $ss_pass"
+	echo "  SOCKS/HTTP local ports:     1010 / 1110"
 }
 
 function install_v2ray_upstream {
 	sudocheck
 
-	read -r -p "Enter your upstream UUID: " UPuuid
+	read -r -p "Enter your upstream UUID (empty = generate random): " UPuuid
+	UPuuid="${UPuuid:-$(uuidgen)}"
 	read -r -p "Enter your upstream port: " Uport
 	read -r -p "Instance name: " name
 
@@ -186,7 +194,11 @@ function install_v2ray_upstream {
 	docker compose up -d
 	popd > /dev/null
 
+	echo ""
 	echo "Upstream server '$name' is up! Config saved to: $dir"
+	echo "  Upstream UUID: $UPuuid"
+	echo "  Upstream port: $Uport"
+	echo "  >> Use this UUID when setting up Bridge servers."
 }
 
 function install_v2ray {
@@ -376,7 +388,8 @@ function install_sniproxy {
 	read -r -p "VMESS server address: " XRAY_SERVER
 	read -r -p "VMESS server port [443]: " XRAY_PORT
 	XRAY_PORT="${XRAY_PORT:-443}"
-	read -r -p "VMESS UUID: " XRAY_UUID
+	read -r -p "VMESS UUID (empty = generate random): " XRAY_UUID
+	XRAY_UUID="${XRAY_UUID:-$(uuidgen)}"
 	read -r -p "VMESS ws path [/]: " XRAY_PATH
 	XRAY_PATH="${XRAY_PATH:-/}"
 	read -r -p "Instance name [sni-proxy]: " name
@@ -429,6 +442,7 @@ function install_sniproxy {
 
 	echo ""
 	echo "SNI Proxy '$name' is up!"
+	echo "  VMESS outbound: $XRAY_SERVER:$XRAY_PORT (UUID: $XRAY_UUID, path: $XRAY_PATH)"
 	echo "Now set the DNS of your client devices to: $SNI_HOST_IP"
 	echo "Manage: cd $dir && docker compose logs -f"
 }
