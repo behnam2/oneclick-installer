@@ -1,0 +1,13 @@
+# Generated instance directories
+v2ray/v2ray-bridge-*/
+!v2ray/v2ray-bridge-server/
+v2ray/v2ray-upstream-*/
+!v2ray/v2ray-upstream-server/
+
+# Logs
+*.log
+v2ray/*/logs/*.log
+
+# OS junk
+.DS_Store
+__pycache__/

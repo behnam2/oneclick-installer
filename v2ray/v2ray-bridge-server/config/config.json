@@ -86,17 +86,15 @@
   },
   "routing": {
     "domainStrategy": "IPIfNonMatch",
-    "settings": {
-      "rules": [
-        {
-          "type": "field",
-          "outboundTag": "freedom",
-          "domain": [
-            "regexp:.*\\.ir$",
-	    "regexp:.*\\.cab$"
-          ]
-        }
-      ]
-    }
+    "rules": [
+      {
+        "type": "field",
+        "outboundTag": "freedom",
+        "domain": [
+          "regexp:.*\\.ir$",
+          "regexp:.*\\.cab$"
+        ]
+      }
+    ]
   }
 }
