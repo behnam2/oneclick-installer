@@ -286,16 +286,168 @@ EOF
 	echo "Manage:   cd $dir && docker compose logs -f"
 }
 
+function install_ipsec {
+	sudocheck
+
+	echo "=== IPsec/L2TP & IKEv2 VPN (hwdsl2/setup-ipsec-vpn) ==="
+	read -r -p "IPsec PSK (empty = random): " VPN_IPSEC_PSK
+	read -r -p "VPN username (empty = random): " VPN_USER
+	read -r -s -p "VPN password (empty = random): " VPN_PASSWORD
+	echo ""
+
+	export VPN_IPSEC_PSK VPN_USER VPN_PASSWORD
+	wget -q https://get.vpnsetup.net -O /tmp/vpnsetup.sh
+	sh /tmp/vpnsetup.sh
+	rm -f /tmp/vpnsetup.sh
+
+	echo "IPsec VPN installed! Credentials are shown above — save them."
+}
+
+function install_pnode {
+	sudocheck
+
+	echo "=== P-Node (miladrahimi/p-node) ==="
+	echo "Installing via the official one-line installer..."
+	curl -fsSL https://raw.githubusercontent.com/miladrahimi/p-node/master/scripts/install.sh | bash
+
+	echo ""
+	echo "P-Node installed! Copy the JSON printed above into P-Manager -> 'Add Node'."
+}
+
+function install_pmanager {
+	sudocheck
+
+	echo "=== P-Manager (miladrahimi/p-manager) ==="
+	read -r -p "Install directory [/opt/p-manager]: " pm_dir
+	pm_dir="${pm_dir:-/opt/p-manager}"
+
+	if [ -d "$pm_dir" ]; then
+		echo "Directory $pm_dir already exists — running 'make update' instead..."
+		make -C "$pm_dir" update
+		return 0
+	fi
+
+	apt-get -y update
+	apt-get -y install make wget curl jq vim git openssl cron openssh-client
+
+	git clone https://github.com/miladrahimi/p-manager.git "$pm_dir"
+	make -C "$pm_dir" setup
+
+	echo ""
+	echo "P-Manager installed! Admin panel: http://<this-server>:8080"
+	echo "Default credentials: admin / password  (change them immediately!)"
+	echo "Config file: $pm_dir/configs/main.json"
+}
+
+function install_vpnui {
+	sudocheck
+
+	echo "=== vpn-ui panel (Sir-MmD/vpn-ui) ==="
+	echo "Installing via the official deploy script..."
+	curl -Ls https://raw.githubusercontent.com/Sir-MmD/vpn-ui/refs/heads/main/deploy.sh | bash
+
+	echo ""
+	echo "vpn-ui installed! Management menu: run 'vpn-ui'"
+}
+
+function install_sniproxy {
+	sudocheck
+
+	if ! command -v docker &> /dev/null; then
+		echo "Docker is not installed. Please install Docker first (option 1)."
+		return 1
+	fi
+	if ! docker compose version &> /dev/null; then
+		echo "docker compose plugin not found. Please install Docker first (option 1)."
+		return 1
+	fi
+
+	echo "=== SNI Proxy (inspired by shervinamd/sni-proxy) ==="
+	echo "Bypass geo-restricted services by changing DNS settings only."
+	echo ""
+	echo "You need a VMESS (ws) server as the outbound, e.g. an upstream"
+	echo "installed via option 3 (v2ray Upstream-server)."
+	echo ""
+
+	local default_ip
+	default_ip="$(hostname -I | awk '{print $1}')"
+	read -r -p "This server's public IP [$default_ip]: " SNI_HOST_IP
+	SNI_HOST_IP="${SNI_HOST_IP:-$default_ip}"
+	read -r -p "VMESS server address: " XRAY_SERVER
+	read -r -p "VMESS server port [443]: " XRAY_PORT
+	XRAY_PORT="${XRAY_PORT:-443}"
+	read -r -p "VMESS UUID: " XRAY_UUID
+	read -r -p "VMESS ws path [/]: " XRAY_PATH
+	XRAY_PATH="${XRAY_PATH:-/}"
+	read -r -p "Instance name [sni-proxy]: " name
+	name="${name:-sni-proxy}"
+
+	local dir="$SCRIPT_DIR/sni-proxy/$name"
+	mkdir -p "$dir"
+	cp "$SCRIPT_DIR/sni-proxy/sniproxy.conf" \
+	   "$SCRIPT_DIR/sni-proxy/dnsproxy-config.yaml" \
+	   "$SCRIPT_DIR/sni-proxy/dnsmasq.conf" \
+	   "$SCRIPT_DIR/sni-proxy/docker-compose.yml" \
+	   "$SCRIPT_DIR/sni-proxy/xray-config.json" "$dir/"
+
+	sed -i "s|SERVER_ADDRESS|$XRAY_SERVER|g" "$dir/xray-config.json"
+	sed -i "s|SERVER_PORT|$XRAY_PORT|g" "$dir/xray-config.json"
+	sed -i "s|SERVER_UUID|$XRAY_UUID|g" "$dir/xray-config.json"
+	sed -i "s|WS_PATH|$XRAY_PATH|g" "$dir/xray-config.json"
+
+	local net_name="${name}-net"
+	local subnet="192.168.25.0/24"
+	local gateway="192.168.25.254"
+	local sni_ip="192.168.25.10"
+	local dns_ip="192.168.25.11"
+	local xray_ip="192.168.25.12"
+
+	{
+		echo "COMPOSE_PROJECT_NAME=$name"
+		echo "SNI_HOST_IP=$SNI_HOST_IP"
+		echo "SNI_NETWORK_NAME=$net_name"
+		echo "SNI_CONTAINER_IP=$sni_ip"
+		echo "DNS_PROXY_CONTAINER_IP=$dns_ip"
+		echo "XRAY_CONTAINER_IP=$xray_ip"
+		echo "SOCKS_SERVICE_PORT=1080"
+	} > "$dir/.env"
+	chmod 600 "$dir/.env"
+
+	if ! docker network inspect "$net_name" &> /dev/null; then
+		docker network create \
+			--driver=bridge \
+			--subnet="$subnet" \
+			--ip-range="$subnet" \
+			--gateway="$gateway" \
+			"$net_name"
+	fi
+
+	pushd "$dir" > /dev/null
+	docker compose pull
+	docker compose up -d
+	popd > /dev/null
+
+	echo ""
+	echo "SNI Proxy '$name' is up!"
+	echo "Now set the DNS of your client devices to: $SNI_HOST_IP"
+	echo "Manage: cd $dir && docker compose logs -f"
+}
+
 # --- Main menu ---
 echo "=== OneClick Installer ==="
 while true; do
-	select option in "Install Docker" "Install SoftEther" "Install v2ray" "Install Squid Proxy" "Exit"; do
+	select option in "Install Docker" "Install SoftEther" "Install v2ray" "Install Squid Proxy" "Install IPsec VPN" "Install P-Node" "Install P-Manager" "Install vpn-ui Panel" "Install SNI Proxy" "Exit"; do
 		case $REPLY in
 			1) install_docker; break ;;
 			2) install_softether; break ;;
 			3) install_v2ray; break ;;
 			4) install_squid; break ;;
-			5) echo "Have a nice day :)"; exit 0 ;;
+			5) install_ipsec; break ;;
+			6) install_pnode; break ;;
+			7) install_pmanager; break ;;
+			8) install_vpnui; break ;;
+			9) install_sniproxy; break ;;
+			10) echo "Have a nice day :)"; exit 0 ;;
 			*) echo "Invalid option." ;;
 		esac
 	done

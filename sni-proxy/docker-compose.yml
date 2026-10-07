@@ -1,0 +1,69 @@
+name: ${COMPOSE_PROJECT_NAME}
+
+services:
+  dnsproxy:
+    image: ${DNSPROXY_IMAGE_NAME:-shervinamd/dnsproxy}:${DNSPROXY_IMAGE_VERSION:-v0.84.2}
+    container_name: ${COMPOSE_PROJECT_NAME}-dnsproxy
+    environment:
+      - SOCKS_IP=${XRAY_CONTAINER_IP}
+      - SOCKS_PORT=${SOCKS_SERVICE_PORT}
+    volumes:
+      - ./dnsproxy-config.yaml:/service/config.yaml
+    extra_hosts:
+      - "cloudflare-dns.com:104.16.248.249"
+      - "dns.google:8.8.8.8"
+      - "dns.adguard.com:94.140.14.14"
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    dns: 1.1.1.1
+    networks:
+      sninet:
+        ipv4_address: ${DNS_PROXY_CONTAINER_IP}
+    depends_on:
+      - xray
+    restart: always
+
+  sni:
+    image: ${SNI_IMAGE_NAME:-shervinamd/sni-proxy}:${SNI_IMAGE_VERSION:-v1.5.0}
+    container_name: ${COMPOSE_PROJECT_NAME}-sni
+    environment:
+      - SNI_HOST_IP=${SNI_HOST_IP}
+      - DNS_PROXY_IP=${DNS_PROXY_CONTAINER_IP}
+      - SOCKS_IP=${XRAY_CONTAINER_IP}
+      - SOCKS_PORT=${SOCKS_SERVICE_PORT}
+    volumes:
+      - ./dnsmasq.conf:/etc/dnsmasq.sample
+      - ./sniproxy.conf:/etc/sniproxy.sample
+    ports:
+      - "${SNI_HOST_IP}:53:53"
+      - "${SNI_HOST_IP}:53:53/udp"
+      - "${SNI_HOST_IP}:80:80"
+      - "${SNI_HOST_IP}:443:443"
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    networks:
+      sninet:
+        ipv4_address: ${SNI_CONTAINER_IP}
+    depends_on:
+      - dnsproxy
+    restart: unless-stopped
+
+  xray:
+    image: ${XRAY_IMAGE_NAME:-shervinamd/xray}:${XRAY_IMAGE_VERSION:-v26.3.27}
+    container_name: ${COMPOSE_PROJECT_NAME}-xray
+    volumes:
+      - ./xray-config.json:/etc/xray/config.json
+    dns: 1.1.1.1
+    networks:
+      sninet:
+        ipv4_address: ${XRAY_CONTAINER_IP}
+    restart: unless-stopped
+
+networks:
+  sninet:
+    external: true
+    name: ${SNI_NETWORK_NAME}

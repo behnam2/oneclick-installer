@@ -4,6 +4,12 @@ v2ray/v2ray-bridge-*/
 v2ray/v2ray-upstream-*/
 !v2ray/v2ray-upstream-server/
 squid/*/
+sni-proxy/*/
+!sni-proxy/sniproxy.conf
+!sni-proxy/dnsproxy-config.yaml
+!sni-proxy/dnsmasq.conf
+!sni-proxy/docker-compose.yml
+!sni-proxy/xray-config.json
 
 # Logs
 *.log

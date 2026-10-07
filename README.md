@@ -10,6 +10,11 @@ A single interactive Bash script to set up your own VPN server with one command 
 | **SoftEther VPN** | SoftEther VPN Server (x86_64), compiled and installed as a systemd service |
 | **v2ray** | Containerized V2Ray in two roles: **Bridge** (entry server, e.g. in Iran) and **Upstream** (exit server abroad) |
 | **Squid Proxy** | Containerized Squid forward proxy with basic auth, IP allowlist and optional upstream chaining |
+| **IPsec VPN** | IPsec/L2TP & IKEv2 server via [hwdsl2/setup-ipsec-vpn](https://github.com/hwdsl2/setup-ipsec-vpn) |
+| **P-Node** | Xray/SSH node agent via [miladrahimi/p-node](https://github.com/miladrahimi/p-node) |
+| **P-Manager** | Web-based Xray/SSH proxy management panel via [miladrahimi/p-manager](https://github.com/miladrahimi/p-manager) |
+| **vpn-ui Panel** | Multi-protocol VPN panel via [Sir-MmD/vpn-ui](https://github.com/Sir-MmD/vpn-ui) |
+| **SNI Proxy** | DNS-based sanctions bypass (dnsmasq + sniproxy + dnsproxy + xray), inspired by [shervinamd/sni-proxy](https://github.com/shervinamd/sni-proxy) |
 
 ## Requirements
 
@@ -33,7 +38,12 @@ Then pick an option from the menu:
 2) Install SoftEther
 3) Install v2ray
 4) Install Squid Proxy
-5) Exit
+5) Install IPsec VPN
+6) Install P-Node
+7) Install P-Manager
+8) Install vpn-ui Panel
+9) Install SNI Proxy
+10) Exit
 ```
 
 ## v2ray: Bridge & Upstream Architecture
@@ -104,6 +114,59 @@ docker compose down
 ```
 
 The generated `.env` file (mode `600`) contains your credentials — keep it private.
+
+## IPsec VPN
+
+Choose **Install IPsec VPN** to deploy an IPsec/L2TP and IKEv2 server using the well-known [hwdsl2/setup-ipsec-vpn](https://github.com/hwdsl2/setup-ipsec-vpn) script.
+
+The script optionally asks for a PSK, username and password — leave any of them empty to auto-generate random credentials. Credentials are printed at the end of the installation; save them.
+
+Client setup guides: see the upstream repo's README.
+
+## P-Node & P-Manager
+
+These two work together — [P-Manager](https://github.com/miladrahimi/p-manager) is the central web panel, [P-Node](https://github.com/miladrahimi/p-node) is the agent you install on each node server.
+
+### P-Node (option 6)
+
+Installs via the official one-line installer. At the end it prints JSON blobs (Full / Xray-only / SSH-only) — paste the matching one into P-Manager's **Add Node** input.
+
+### P-Manager (option 7)
+
+Clones the repo into `/opt/p-manager` (customizable) and runs `make setup`. Then:
+
+- Admin panel: `http://<server>:8080`
+- Default credentials: `admin` / `password` — **change immediately**
+- Config file: `/opt/p-manager/configs/main.json`
+
+If the directory already exists, the option runs `make update` instead.
+
+## vpn-ui Panel
+
+Choose **Install vpn-ui Panel** to deploy [Sir-MmD/vpn-ui](https://github.com/Sir-MmD/vpn-ui) — a multi-protocol panel (L2TP/IPsec, PPTP, OpenVPN, OpenConnect, SSTP, IKEv2, WireGuard, AmneziaWG, MTProto, SSH tunnel, GRE) via the official `deploy.sh`.
+
+After installation, run `vpn-ui` for the management menu. Uninstall with:
+
+```bash
+sudo /opt/vpn-ui/vpn-ui-amd64 --uninstall
+```
+
+## SNI Proxy
+
+Choose **Install SNI Proxy** to set up DNS-based sanctions bypass, inspired by [shervinamd/sni-proxy](https://github.com/shervinamd/sni-proxy). Client devices just change their DNS to this server — no apps needed.
+
+The script asks for:
+
+| Prompt | Description |
+|---|---|
+| Server public IP | Auto-detected from `hostname -I` |
+| VMESS server address/port/UUID | Your outbound server — e.g. an **Upstream-server** from option 3 |
+| VMESS ws path | Default `/` |
+| Instance name | Default `sni-proxy`; configs go to `sni-proxy/<name>/` |
+
+It then generates the Xray outbound config, creates an isolated Docker network (`<name>-net`, `192.168.25.0/24`), and starts three containers: `xray` (SOCKS outbound), `dnsproxy` (DoH upstream) and `sni` (dnsmasq + sniproxy on ports 53/80/443).
+
+After installation, point your clients' DNS to the server IP.
 
 ## Notes & Security
 
