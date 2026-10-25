@@ -46,6 +46,8 @@ Then pick an option from the menu:
 10) Exit
 ```
 
+**Navigation tips:** at any input prompt, type `b` to go **back** (cancel the current installer) or `q` to **quit** the script. Sub-menus (like v2ray role selection) also have their own **Back** and **Quit** entries. Empty answers fall back to the shown default.
+
 ## v2ray: Bridge & Upstream Architecture
 
 This repo ships a two-hop V2Ray setup — useful when you want clients to connect to a local (bridge) server which forwards traffic to a foreign (upstream) server:

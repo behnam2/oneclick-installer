@@ -4,43 +4,94 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# ---------- Colors & messaging ----------
+if [ -t 1 ]; then
+	C_RED=$'\033[0;31m'; C_GRN=$'\033[0;32m'; C_YLW=$'\033[0;33m'
+	C_BLU=$'\033[0;34m'; C_CYN=$'\033[0;36m'; C_RST=$'\033[0m'
+else
+	C_RED=""; C_GRN=""; C_YLW=""; C_BLU=""; C_CYN=""; C_RST=""
+fi
+
+info()    { echo "${C_BLU}[*]${C_RST} $*"; }
+success() { echo "${C_GRN}[+]${C_RST} $*"; }
+warn()    { echo "${C_YLW}[!]${C_RST} $*"; }
+error()   { echo "${C_RED}[-]${C_RST} $*" >&2; }
+step()    { echo ""; echo "${C_CYN}==> $*${C_RST}"; }
+
+# Generic cancel marker: users can type 'b' (back) or 'q' (quit) at any prompt.
+__CANCEL=0
+
+# ---------- Helpers ----------
 function sudocheck {
 	if [ "$(id -u)" != "0" ]; then
-		echo "Please run this script as root (e.g. sudo -i or sudo bash script.sh)"
+		error "This script must be run as root (use: sudo bash script.sh)"
 		exit 1
 	fi
 }
 
 function os_version_check {
 	if grep -qi "ubuntu" /etc/os-release; then
-		echo "Detected Ubuntu."
+		info "Detected Ubuntu."
 	else
-		echo "This script is tested on Ubuntu. Your distro may not be supported."
-		read -r -p "Continue anyway? [y/N]: " prompt
-		prompt="${prompt,,}"
-		if [ "$prompt" != "y" ] && [ "$prompt" != "yes" ]; then
-			echo "OK, have a good day!"
+		warn "This script is tested on Ubuntu. Your distro may not be fully supported."
+		if ! confirm "Continue anyway?"; then
+			info "Aborted. Have a good day!"
 			exit 0
 		fi
 	fi
 }
 
-function location_check {
+# confirm "Question?" -> returns 0 on yes, 1 on no (default: no)
+function confirm {
+	local q="$1" ans
+	read -r -p "$q [y/N]: " ans
+	ans="${ans,,}"
+	[ "$ans" = "y" ] || [ "$ans" = "yes" ]
+}
+
+# ask VAR_NAME "Prompt" [default] [required]
+# - empty input keeps the default
+# - 'b' => returns 1 (back), 'q' => exit script
+# - if 'required' is passed as 4th arg, empty without default re-asks
+function ask {
+	local var="$1" prompt="$2" default="${3:-}" required="${4:-}" value
 	while true; do
-		read -r -p "Is this server located in Iran? [y/N]: " iran
-		iran="${iran,,}"
-		case "$iran" in
-			y|yes) IS_IRAN=1; return 0 ;;
-			n|no|"") IS_IRAN=0; return 0 ;;
-			*) echo "Please answer y or n." ;;
+		if [ -n "$default" ]; then
+			read -r -p "$prompt [$default] (b=back, q=quit): " value
+		else
+			read -r -p "$prompt (b=back, q=quit): " value
+		fi
+		value="${value:-$default}"
+		case "${value,,}" in
+			q|quit|exit) info "Goodbye!"; exit 0 ;;
+			b|back) __CANCEL=1; return 1 ;;
 		esac
+		if [ -n "$value" ] || [ "$required" != "required" ]; then
+			printf -v "$var" '%s' "$value"
+			return 0
+		fi
+		warn "This field is required."
 	done
+}
+
+# require_docker: returns 1 (with guidance) if docker/compose missing
+function require_docker {
+	if ! command -v docker &> /dev/null; then
+		error "Docker is not installed. Run option 1 (Install Docker) first."
+		return 1
+	fi
+	if ! docker compose version &> /dev/null; then
+		error "The docker compose plugin is missing. Run option 1 (Install Docker) first."
+		return 1
+	fi
+	return 0
 }
 
 function install_docker {
 	os_version_check
 	sudocheck
 
+	step "Installing Docker Engine"
 	apt-get update && apt-get install -y \
 		ca-certificates \
 		curl \
@@ -48,9 +99,8 @@ function install_docker {
 		lsb-release
 
 	# Iran: use Shecan DNS to reach Docker repos (sanctions workaround)
-	location_check
-	if [ "$IS_IRAN" = "1" ]; then
-		echo "Setting Shecan DNS (178.22.122.100) for this session..."
+	if confirm "Is this server located in Iran (apply DNS workaround)?"; then
+		info "Applying Shecan DNS (178.22.122.100). Backup saved to /etc/resolv.conf.bak"
 		cp /etc/resolv.conf /etc/resolv.conf.bak
 		sed -i '1 i\nameserver 178.22.122.100' /etc/resolv.conf
 	fi
@@ -64,7 +114,7 @@ function install_docker {
 	apt-get update
 	apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 
-	echo "Docker installed successfully!"
+	success "Docker installed successfully!"
 	docker version
 }
 
@@ -73,10 +123,11 @@ function install_softether {
 	os_version_check
 
 	if [ "$(uname -m)" != "x86_64" ]; then
-		echo "This installer only supports x86_64 architecture."
-		exit 1
+		error "This installer only supports x86_64 architecture."
+		return 1
 	fi
 
+	step "Installing SoftEther VPN Server"
 	apt-get update -y
 	apt-get install -y build-essential gnupg2 gcc make wget
 
@@ -130,24 +181,27 @@ EOF
 	systemctl enable vpnserver
 	popd > /dev/null
 
-	echo "SoftEther VPN Server installed and started!"
-	echo "Manage it with: /usr/local/vpnserver/vpncmd"
+	success "SoftEther VPN Server installed and started!"
+	info "Manage it with: /usr/local/vpnserver/vpncmd"
 }
 
 function install_v2ray_bridge {
 	sudocheck
 
-	read -r -p "Enter your upstream server IP: " UIP
-	read -r -p "Enter your upstream server port: " Uport
-	read -r -p "Enter your upstream UUID (empty = generate random): " UPuuid
+	step "Setting up v2ray Bridge server (entry)"
+	info "Leave any field empty and type 'b' to go back, 'q' to quit."
+
+	local UIP Uport UPuuid Bport name
+	ask UIP    "Upstream server IP" "" required || { warn "Cancelled."; return 1; }
+	ask Uport  "Upstream server port" "" required || { warn "Cancelled."; return 1; }
+	ask UPuuid "Upstream UUID (empty = generate random)" "" || { warn "Cancelled."; return 1; }
 	UPuuid="${UPuuid:-$(uuidgen)}"
-	read -r -p "Enter your bridge listen port: " Bport
-	read -r -p "Instance name: " name
+	ask Bport  "Bridge listen port" "" required || { warn "Cancelled."; return 1; }
+	ask name   "Instance name" "bridge" || { warn "Cancelled."; return 1; }
 
 	local dir="$SCRIPT_DIR/v2ray/v2ray-bridge-$name"
 	cp -r "$SCRIPT_DIR/v2ray/v2ray-bridge-server" "$dir"
 
-	# Generate random secrets
 	local ss_pass bridge_uuid
 	ss_pass="$(openssl rand -base64 16 | tr -dc 'a-zA-Z0-9' | head -c 16)"
 	bridge_uuid="$(uuidgen)"
@@ -167,7 +221,7 @@ function install_v2ray_bridge {
 	popd > /dev/null
 
 	echo ""
-	echo "Bridge server '$name' is up! Config saved to: $dir"
+	success "Bridge server '$name' is up! Config saved to: $dir"
 	echo "  Bridge UUID (clients):      $bridge_uuid"
 	echo "  Upstream UUID:              $UPuuid"
 	echo "  Shadowsocks password:       $ss_pass"
@@ -177,10 +231,12 @@ function install_v2ray_bridge {
 function install_v2ray_upstream {
 	sudocheck
 
-	read -r -p "Enter your upstream UUID (empty = generate random): " UPuuid
+	step "Setting up v2ray Upstream server (exit)"
+	local UPuuid Uport name
+	ask UPuuid "Upstream UUID (empty = generate random)" "" || { warn "Cancelled."; return 1; }
 	UPuuid="${UPuuid:-$(uuidgen)}"
-	read -r -p "Enter your upstream port: " Uport
-	read -r -p "Instance name: " name
+	ask Uport  "Upstream port" "" required || { warn "Cancelled."; return 1; }
+	ask name   "Instance name" "upstream" || { warn "Cancelled."; return 1; }
 
 	local dir="$SCRIPT_DIR/v2ray/v2ray-upstream-$name"
 	cp -r "$SCRIPT_DIR/v2ray/v2ray-upstream-server" "$dir"
@@ -195,29 +251,24 @@ function install_v2ray_upstream {
 	popd > /dev/null
 
 	echo ""
-	echo "Upstream server '$name' is up! Config saved to: $dir"
+	success "Upstream server '$name' is up! Config saved to: $dir"
 	echo "  Upstream UUID: $UPuuid"
 	echo "  Upstream port: $Uport"
-	echo "  >> Use this UUID when setting up Bridge servers."
+	info "Use this UUID when setting up Bridge servers (option 3 -> Bridge)."
 }
 
 function install_v2ray {
-	if ! command -v docker &> /dev/null; then
-		echo "Docker is not installed. Please install Docker first (option 1)."
-		return 1
-	fi
-	if ! docker compose version &> /dev/null; then
-		echo "docker compose plugin not found. Please install Docker first (option 1)."
-		return 1
-	fi
+	require_docker || return 1
 
 	while true; do
-		select role in "Bridge-server (Iran/entry)" "Upstream-server (exit)" "Back"; do
+		step "v2ray — choose a role"
+		select role in "Bridge-server (Iran/entry)" "Upstream-server (exit)" "Back to main menu" "Quit"; do
 			case $REPLY in
 				1) install_v2ray_bridge; break ;;
 				2) install_v2ray_upstream; break ;;
 				3) return 0 ;;
-				*) echo "Invalid option." ;;
+				4) info "Goodbye!"; exit 0 ;;
+				*) error "Invalid option. Pick 1-4." ;;
 			esac
 		done
 	done
@@ -225,30 +276,20 @@ function install_v2ray {
 
 function install_squid {
 	sudocheck
+	require_docker || return 1
 
-	if ! command -v docker &> /dev/null; then
-		echo "Docker is not installed. Please install Docker first (option 1)."
-		return 1
-	fi
-	if ! docker compose version &> /dev/null; then
-		echo "docker compose plugin not found. Please install Docker first (option 1)."
-		return 1
-	fi
-
-	read -r -p "Proxy username: " PROXY_USERNAME
-	read -r -p "Proxy password: " PROXY_PASSWORD
-	read -r -p "Listen port [3128]: " PROXY_PORT
-	PROXY_PORT="${PROXY_PORT:-3128}"
-	read -r -p "Instance name [squidproxy]: " name
-	name="${name:-squidproxy}"
-	read -r -p "Allowed IPs without auth (comma-separated, empty for none): " ALLOWED_IPS
-	read -r -p "Upstream cache_peer (e.g. '203.0.113.5 3128', empty for none): " CACHE_PEER
+	step "Setting up Squid proxy"
+	local PROXY_USERNAME PROXY_PASSWORD PROXY_PORT name ALLOWED_IPS CACHE_PEER
+	ask PROXY_USERNAME "Proxy username" "" required || { warn "Cancelled."; return 1; }
+	ask PROXY_PASSWORD "Proxy password" "" required || { warn "Cancelled."; return 1; }
+	ask PROXY_PORT     "Listen port" "3128" || { warn "Cancelled."; return 1; }
+	ask name           "Instance name" "squidproxy" || { warn "Cancelled."; return 1; }
+	ask ALLOWED_IPS    "Allowed IPs without auth (comma-separated, empty for none)" "" || { warn "Cancelled."; return 1; }
+	ask CACHE_PEER     "Upstream cache_peer (e.g. '203.0.113.5 3128', empty for none)" "" || { warn "Cancelled."; return 1; }
 
 	local never_direct=""
-	if [ -n "$CACHE_PEER" ]; then
-		read -r -p "Force ALL traffic through the peer? [y/N]: " nd
-		nd="${nd,,}"
-		[ "$nd" = "y" ] || [ "$nd" = "yes" ] && never_direct="1"
+	if [ -n "$CACHE_PEER" ] && confirm "Force ALL traffic through the peer?"; then
+		never_direct="1"
 	fi
 
 	local dir="$SCRIPT_DIR/squid/$name"
@@ -293,18 +334,19 @@ EOF
 	popd > /dev/null
 
 	echo ""
-	echo "Squid proxy '$name' is up on port $PROXY_PORT!"
-	echo "Test it:  curl -x http://$PROXY_USERNAME:****@<this-server>:$PROXY_PORT https://example.com"
-	echo "Manage:   cd $dir && docker compose logs -f"
+	success "Squid proxy '$name' is up on port $PROXY_PORT!"
+	info "Test it:  curl -x http://$PROXY_USERNAME:****@<this-server>:$PROXY_PORT https://example.com"
+	info "Manage:   cd $dir && docker compose logs -f"
 }
 
 function install_ipsec {
 	sudocheck
 
-	echo "=== IPsec/L2TP & IKEv2 VPN (hwdsl2/setup-ipsec-vpn) ==="
-	read -r -p "IPsec PSK (empty = random): " VPN_IPSEC_PSK
-	read -r -p "VPN username (empty = random): " VPN_USER
-	read -r -s -p "VPN password (empty = random): " VPN_PASSWORD
+	step "Installing IPsec/L2TP & IKEv2 VPN (hwdsl2/setup-ipsec-vpn)"
+	local VPN_IPSEC_PSK VPN_USER VPN_PASSWORD
+	ask VPN_IPSEC_PSK "IPsec PSK (empty = random)" "" || { warn "Cancelled."; return 1; }
+	ask VPN_USER      "VPN username (empty = random)" "" || { warn "Cancelled."; return 1; }
+	read -r -s -p "VPN password (empty = random, input hidden): " VPN_PASSWORD
 	echo ""
 
 	export VPN_IPSEC_PSK VPN_USER VPN_PASSWORD
@@ -312,29 +354,30 @@ function install_ipsec {
 	sh /tmp/vpnsetup.sh
 	rm -f /tmp/vpnsetup.sh
 
-	echo "IPsec VPN installed! Credentials are shown above — save them."
+	success "IPsec VPN installed! Credentials are shown above — save them."
 }
 
 function install_pnode {
 	sudocheck
 
-	echo "=== P-Node (miladrahimi/p-node) ==="
-	echo "Installing via the official one-line installer..."
+	step "Installing P-Node (miladrahimi/p-node)"
+	info "Using the official one-line installer..."
 	curl -fsSL https://raw.githubusercontent.com/miladrahimi/p-node/master/scripts/install.sh | bash
 
 	echo ""
-	echo "P-Node installed! Copy the JSON printed above into P-Manager -> 'Add Node'."
+	success "P-Node installed!"
+	info "Copy the JSON printed above into P-Manager -> 'Add Node'."
 }
 
 function install_pmanager {
 	sudocheck
 
-	echo "=== P-Manager (miladrahimi/p-manager) ==="
-	read -r -p "Install directory [/opt/p-manager]: " pm_dir
-	pm_dir="${pm_dir:-/opt/p-manager}"
+	step "Installing P-Manager (miladrahimi/p-manager)"
+	local pm_dir
+	ask pm_dir "Install directory" "/opt/p-manager" || { warn "Cancelled."; return 1; }
 
 	if [ -d "$pm_dir" ]; then
-		echo "Directory $pm_dir already exists — running 'make update' instead..."
+		warn "Directory $pm_dir already exists — running 'make update' instead..."
 		make -C "$pm_dir" update
 		return 0
 	fi
@@ -346,54 +389,41 @@ function install_pmanager {
 	make -C "$pm_dir" setup
 
 	echo ""
-	echo "P-Manager installed! Admin panel: http://<this-server>:8080"
-	echo "Default credentials: admin / password  (change them immediately!)"
-	echo "Config file: $pm_dir/configs/main.json"
+	success "P-Manager installed! Admin panel: http://<this-server>:8080"
+	warn "Default credentials: admin / password  (change them immediately!)"
+	info "Config file: $pm_dir/configs/main.json"
 }
 
 function install_vpnui {
 	sudocheck
 
-	echo "=== vpn-ui panel (Sir-MmD/vpn-ui) ==="
-	echo "Installing via the official deploy script..."
+	step "Installing vpn-ui panel (Sir-MmD/vpn-ui)"
+	info "Using the official deploy script..."
 	curl -Ls https://raw.githubusercontent.com/Sir-MmD/vpn-ui/refs/heads/main/deploy.sh | bash
 
 	echo ""
-	echo "vpn-ui installed! Management menu: run 'vpn-ui'"
+	success "vpn-ui installed! Management menu: run 'vpn-ui'"
 }
 
 function install_sniproxy {
 	sudocheck
+	require_docker || return 1
 
-	if ! command -v docker &> /dev/null; then
-		echo "Docker is not installed. Please install Docker first (option 1)."
-		return 1
-	fi
-	if ! docker compose version &> /dev/null; then
-		echo "docker compose plugin not found. Please install Docker first (option 1)."
-		return 1
-	fi
-
-	echo "=== SNI Proxy (inspired by shervinamd/sni-proxy) ==="
-	echo "Bypass geo-restricted services by changing DNS settings only."
-	echo ""
-	echo "You need a VMESS (ws) server as the outbound, e.g. an upstream"
-	echo "installed via option 3 (v2ray Upstream-server)."
+	step "Setting up SNI Proxy (inspired by shervinamd/sni-proxy)"
+	info "Bypass geo-restricted services by changing DNS settings only."
+	info "You need a VMESS (ws) outbound, e.g. an upstream from option 3."
 	echo ""
 
+	local SNI_HOST_IP XRAY_SERVER XRAY_PORT XRAY_UUID XRAY_PATH name
 	local default_ip
 	default_ip="$(hostname -I | awk '{print $1}')"
-	read -r -p "This server's public IP [$default_ip]: " SNI_HOST_IP
-	SNI_HOST_IP="${SNI_HOST_IP:-$default_ip}"
-	read -r -p "VMESS server address: " XRAY_SERVER
-	read -r -p "VMESS server port [443]: " XRAY_PORT
-	XRAY_PORT="${XRAY_PORT:-443}"
-	read -r -p "VMESS UUID (empty = generate random): " XRAY_UUID
+	ask SNI_HOST_IP "This server's public IP" "$default_ip" || { warn "Cancelled."; return 1; }
+	ask XRAY_SERVER "VMESS server address" "" required || { warn "Cancelled."; return 1; }
+	ask XRAY_PORT   "VMESS server port" "443" || { warn "Cancelled."; return 1; }
+	ask XRAY_UUID   "VMESS UUID (empty = generate random)" "" || { warn "Cancelled."; return 1; }
 	XRAY_UUID="${XRAY_UUID:-$(uuidgen)}"
-	read -r -p "VMESS ws path [/]: " XRAY_PATH
-	XRAY_PATH="${XRAY_PATH:-/}"
-	read -r -p "Instance name [sni-proxy]: " name
-	name="${name:-sni-proxy}"
+	ask XRAY_PATH   "VMESS ws path" "/" || { warn "Cancelled."; return 1; }
+	ask name        "Instance name" "sni-proxy" || { warn "Cancelled."; return 1; }
 
 	local dir="$SCRIPT_DIR/sni-proxy/$name"
 	mkdir -p "$dir"
@@ -441,14 +471,16 @@ function install_sniproxy {
 	popd > /dev/null
 
 	echo ""
-	echo "SNI Proxy '$name' is up!"
+	success "SNI Proxy '$name' is up!"
 	echo "  VMESS outbound: $XRAY_SERVER:$XRAY_PORT (UUID: $XRAY_UUID, path: $XRAY_PATH)"
-	echo "Now set the DNS of your client devices to: $SNI_HOST_IP"
-	echo "Manage: cd $dir && docker compose logs -f"
+	info "Now set the DNS of your client devices to: $SNI_HOST_IP"
+	info "Manage: cd $dir && docker compose logs -f"
 }
 
 # --- Main menu ---
-echo "=== OneClick Installer ==="
+clear
+echo "${C_CYN}=== OneClick Installer ===${C_RST}"
+info "Pick an option. Inside prompts: 'b' = back, 'q' = quit."
 while true; do
 	select option in "Install Docker" "Install SoftEther" "Install v2ray" "Install Squid Proxy" "Install IPsec VPN" "Install P-Node" "Install P-Manager" "Install vpn-ui Panel" "Install SNI Proxy" "Exit"; do
 		case $REPLY in
@@ -461,8 +493,8 @@ while true; do
 			7) install_pmanager; break ;;
 			8) install_vpnui; break ;;
 			9) install_sniproxy; break ;;
-			10) echo "Have a nice day :)"; exit 0 ;;
-			*) echo "Invalid option." ;;
+			10) info "Have a nice day :)"; exit 0 ;;
+			*) error "Invalid option. Pick 1-10." ;;
 		esac
 	done
 done
