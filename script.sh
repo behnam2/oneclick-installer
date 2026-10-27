@@ -348,10 +348,13 @@ function install_ipsec {
 	ask VPN_USER      "VPN username (empty = random)" "" || { warn "Cancelled."; return 1; }
 	read -r -s -p "VPN password (empty = random, input hidden): " VPN_PASSWORD
 	echo ""
+	stty sane 2>/dev/null || true   # restore terminal echo after hidden input
 
 	export VPN_IPSEC_PSK VPN_USER VPN_PASSWORD
 	wget -q https://get.vpnsetup.net -O /tmp/vpnsetup.sh
-	sh /tmp/vpnsetup.sh
+	# run in a subshell so the upstream script's 'exit' doesn't kill our script
+	( sh /tmp/vpnsetup.sh ) || warn "The IPsec installer reported a non-zero status."
+	stty sane 2>/dev/null || true
 	rm -f /tmp/vpnsetup.sh
 
 	success "IPsec VPN installed! Credentials are shown above — save them."
@@ -362,7 +365,8 @@ function install_pnode {
 
 	step "Installing P-Node (miladrahimi/p-node)"
 	info "Using the official one-line installer..."
-	curl -fsSL https://raw.githubusercontent.com/miladrahimi/p-node/master/scripts/install.sh | bash
+	( curl -fsSL https://raw.githubusercontent.com/miladrahimi/p-node/master/scripts/install.sh | bash ) || warn "The P-Node installer reported a non-zero status."
+	stty sane 2>/dev/null || true
 
 	echo ""
 	success "P-Node installed!"
@@ -399,7 +403,8 @@ function install_vpnui {
 
 	step "Installing vpn-ui panel (Sir-MmD/vpn-ui)"
 	info "Using the official deploy script..."
-	curl -Ls https://raw.githubusercontent.com/Sir-MmD/vpn-ui/refs/heads/main/deploy.sh | bash
+	( curl -Ls https://raw.githubusercontent.com/Sir-MmD/vpn-ui/refs/heads/main/deploy.sh | bash ) || warn "The vpn-ui installer reported a non-zero status."
+	stty sane 2>/dev/null || true
 
 	echo ""
 	success "vpn-ui installed! Management menu: run 'vpn-ui'"
@@ -482,6 +487,7 @@ clear
 echo "${C_CYN}=== OneClick Installer ===${C_RST}"
 info "Pick an option. Inside prompts: 'b' = back, 'q' = quit."
 while true; do
+	echo ""
 	select option in "Install Docker" "Install SoftEther" "Install v2ray" "Install Squid Proxy" "Install IPsec VPN" "Install P-Node" "Install P-Manager" "Install vpn-ui Panel" "Install SNI Proxy" "Exit"; do
 		case $REPLY in
 			1) install_docker; break ;;
