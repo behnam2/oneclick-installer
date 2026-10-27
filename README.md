@@ -51,7 +51,15 @@ Then pick an option from the menu:
 
 ### Uninstalling
 
-Option **10** opens an uninstall menu. It removes instances created by this script (v2ray / Squid / SNI Proxy — including their Docker containers, volumes, networks and generated config folders) as well as system services (SoftEther, IPsec, P-Node, P-Manager, vpn-ui). Docker itself is left installed.
+Option **10** opens an uninstall menu. Wherever the upstream project ships an official uninstaller, we use it so removal is complete and safe:
+
+- **IPsec VPN** → official `vpnuninstall.sh` (hwdsl2), with a package-removal fallback
+- **P-Node / P-Manager** → their own `make uninstall`
+- **vpn-ui** → `/opt/vpn-ui/vpn-ui-amd64 --uninstall`
+- **SoftEther** → stops/disables the service, removes the init script and `/usr/local/vpnserver` (upstream ships no uninstaller)
+- **v2ray / Squid / SNI Proxy** (created by this script) → `docker compose down`, remove networks, volumes and generated config folders
+
+Docker itself is left installed.
 
 ## v2ray: Bridge & Upstream Architecture
 

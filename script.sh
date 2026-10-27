@@ -582,13 +582,26 @@ function uninstall_softether {
 function uninstall_ipsec {
 	sudocheck
 
-	warn "The upstream IPsec script has no uninstaller. This stops services and removes packages."
-	if confirm "Remove IPsec/L2TP/IKEv2 (libreswan + xl2tpd)?"; then
+	step "Uninstalling IPsec VPN (hwdsl2 official uninstaller)"
+	warn "This permanently deletes all VPN config and removes Libreswan + xl2tpd."
+	if ! confirm "Continue with IPsec VPN removal?"; then
+		warn "Cancelled."
+		return 1
+	fi
+
+	local unst
+	unst="$(mktemp /tmp/vpnuninstall.XXXXXX.sh)"
+	if wget -q https://get.vpnsetup.net/unst -O "$unst"; then
+		( bash "$unst" ) || warn "The IPsec uninstaller reported a non-zero status."
+		stty sane 2>/dev/null || true
+	else
+		error "Could not download the official uninstaller. Falling back to package removal..."
 		systemctl stop ipsec xl2tpd 2>/dev/null || true
 		systemctl disable ipsec xl2tpd 2>/dev/null || true
 		apt-get -y remove --purge libreswan xl2tpd 2>/dev/null || true
-		success "IPsec VPN removed"
 	fi
+	rm -f "$unst"
+	success "IPsec VPN removed"
 }
 
 function uninstall_pmanager {
@@ -596,29 +609,31 @@ function uninstall_pmanager {
 
 	local pm_dir
 	ask pm_dir "P-Manager install directory" "/opt/p-manager" || { warn "Cancelled."; return 1; }
-	if [ -d "$pm_dir" ]; then
-		if confirm "Uninstall P-Manager from $pm_dir?"; then
-			make -C "$pm_dir" uninstall
+	if [ -d "$pm_dir" ] && [ -f "$pm_dir/Makefile" ]; then
+		if confirm "Uninstall P-Manager from $pm_dir (official uninstaller)?"; then
+			( make -C "$pm_dir" uninstall ) || warn "P-Manager uninstaller reported a non-zero status."
 			success "P-Manager uninstalled"
 		fi
 	else
-		info "No P-Manager found at $pm_dir"
+		info "No P-Manager installation found at $pm_dir"
 	fi
 }
 
 function uninstall_pnode {
 	sudocheck
 
+	# p-node official installer clones into p-node-N dirs (cwd, $HOME, /opt)
 	local found=0 d
-	for d in /opt/p-node-* "$HOME"/p-node-* ./p-node-*; do
+	for d in /opt/p-node-* /root/p-node-* "$HOME"/p-node-* ./p-node-*; do
 		[ -d "$d" ] || continue
+		[ -f "$d/Makefile" ] || continue
 		found=1
-		if confirm "Uninstall P-Node at $d?"; then
-			make -C "$d" uninstall
+		if confirm "Uninstall P-Node at $d (official uninstaller)?"; then
+			( make -C "$d" uninstall ) || warn "P-Node uninstaller at $d reported a non-zero status."
 			success "P-Node at $d uninstalled"
 		fi
 	done
-	[ "$found" = "0" ] && info "No p-node-* directories found."
+	[ "$found" = "0" ] && info "No p-node installations found (searched /opt, /root, \$HOME, cwd)."
 }
 
 function uninstall_vpnui {
