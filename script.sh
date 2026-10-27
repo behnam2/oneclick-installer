@@ -495,13 +495,173 @@ function install_sniproxy {
 	info "Manage: cd $dir && docker compose logs -f"
 }
 
+# ---------- Uninstallers ----------
+function uninstall_v2ray {
+	sudocheck
+	require_docker || return 1
+
+	local found=0 d
+	for d in "$SCRIPT_DIR"/v2ray/v2ray-bridge-* "$SCRIPT_DIR"/v2ray/v2ray-upstream-*; do
+		[ -d "$d" ] || continue
+		found=1
+		local name
+		name="$(basename "$d")"
+		if confirm "Remove $name?"; then
+			pushd "$d" > /dev/null
+			docker compose down -v 2>/dev/null || true
+			popd > /dev/null
+			rm -rf "$d"
+			success "Removed $name"
+		fi
+	done
+	[ "$found" = "0" ] && info "No v2ray instances found."
+}
+
+function uninstall_squid {
+	sudocheck
+	require_docker || return 1
+
+	local found=0 d
+	for d in "$SCRIPT_DIR"/squid/*/; do
+		[ -d "$d" ] || continue
+		found=1
+		local name
+		name="$(basename "$d")"
+		if confirm "Remove squid instance '$name' (and its cache volume)?"; then
+			pushd "$d" > /dev/null
+			docker compose down -v 2>/dev/null || true
+			popd > /dev/null
+			rm -rf "$d"
+			success "Removed squid instance '$name'"
+		fi
+	done
+	[ "$found" = "0" ] && info "No squid instances found."
+}
+
+function uninstall_sniproxy {
+	sudocheck
+	require_docker || return 1
+
+	local found=0 d
+	for d in "$SCRIPT_DIR"/sni-proxy/*/; do
+		[ -d "$d" ] || continue
+		found=1
+		local name net
+		name="$(basename "$d")"
+		net="${name}-net"
+		if confirm "Remove SNI proxy '$name'?"; then
+			pushd "$d" > /dev/null
+			docker compose down 2>/dev/null || true
+			popd > /dev/null
+			docker network rm "$net" 2>/dev/null || true
+			rm -rf "$d"
+			success "Removed SNI proxy '$name'"
+		fi
+	done
+	[ "$found" = "0" ] && info "No SNI proxy instances found."
+}
+
+function uninstall_softether {
+	sudocheck
+
+	if [ ! -d /usr/local/vpnserver ]; then
+		info "SoftEther is not installed."
+		return 0
+	fi
+	if confirm "Remove SoftEther VPN Server?"; then
+		systemctl stop vpnserver 2>/dev/null || /etc/init.d/vpnserver stop 2>/dev/null || true
+		systemctl disable vpnserver 2>/dev/null || true
+		update-rc.d -f vpnserver remove 2>/dev/null || true
+		rm -f /etc/init.d/vpnserver
+		rm -rf /usr/local/vpnserver
+		systemctl daemon-reload
+		success "SoftEther VPN Server removed"
+	fi
+}
+
+function uninstall_ipsec {
+	sudocheck
+
+	warn "The upstream IPsec script has no uninstaller. This stops services and removes packages."
+	if confirm "Remove IPsec/L2TP/IKEv2 (libreswan + xl2tpd)?"; then
+		systemctl stop ipsec xl2tpd 2>/dev/null || true
+		systemctl disable ipsec xl2tpd 2>/dev/null || true
+		apt-get -y remove --purge libreswan xl2tpd 2>/dev/null || true
+		success "IPsec VPN removed"
+	fi
+}
+
+function uninstall_pmanager {
+	sudocheck
+
+	local pm_dir
+	ask pm_dir "P-Manager install directory" "/opt/p-manager" || { warn "Cancelled."; return 1; }
+	if [ -d "$pm_dir" ]; then
+		if confirm "Uninstall P-Manager from $pm_dir?"; then
+			make -C "$pm_dir" uninstall
+			success "P-Manager uninstalled"
+		fi
+	else
+		info "No P-Manager found at $pm_dir"
+	fi
+}
+
+function uninstall_pnode {
+	sudocheck
+
+	local found=0 d
+	for d in /opt/p-node-* "$HOME"/p-node-* ./p-node-*; do
+		[ -d "$d" ] || continue
+		found=1
+		if confirm "Uninstall P-Node at $d?"; then
+			make -C "$d" uninstall
+			success "P-Node at $d uninstalled"
+		fi
+	done
+	[ "$found" = "0" ] && info "No p-node-* directories found."
+}
+
+function uninstall_vpnui {
+	sudocheck
+
+	if [ -f /opt/vpn-ui/vpn-ui-amd64 ]; then
+		if confirm "Uninstall vpn-ui panel?"; then
+			( /opt/vpn-ui/vpn-ui-amd64 --uninstall ) || warn "vpn-ui uninstaller reported a non-zero status."
+			success "vpn-ui uninstalled"
+		fi
+	else
+		info "vpn-ui not found at /opt/vpn-ui"
+	fi
+}
+
+function uninstall_menu {
+	while true; do
+		step "Uninstall — choose a service"
+		select u in "v2ray instances" "Squid instances" "SNI Proxy instances" "SoftEther VPN" "IPsec VPN" "P-Manager" "P-Node" "vpn-ui Panel" "Back to main menu" "Quit"; do
+			case $REPLY in
+				1) uninstall_v2ray; break ;;
+				2) uninstall_squid; break ;;
+				3) uninstall_sniproxy; break ;;
+				4) uninstall_softether; break ;;
+				5) uninstall_ipsec; break ;;
+				6) uninstall_pmanager; break ;;
+				7) uninstall_pnode; break ;;
+				8) uninstall_vpnui; break ;;
+				9) return 0 ;;
+				10) info "Goodbye!"; exit 0 ;;
+				*) error "Invalid option. Pick 1-10." ;;
+			esac
+		done
+	done
+}
+
 # --- Main menu ---
 clear
 echo "${C_CYN}=== OneClick Installer ===${C_RST}"
 info "Pick an option. Inside prompts: 'b' = back, 'q' = quit."
 while true; do
 	echo ""
-	select option in "Install Docker" "Install SoftEther" "Install v2ray" "Install Squid Proxy" "Install IPsec VPN" "Install P-Node" "Install P-Manager" "Install vpn-ui Panel" "Install SNI Proxy" "Exit"; do
+	select option in "Install Docker" "Install SoftEther" "Install v2ray" "Install Squid Proxy" "Install IPsec VPN" "Install P-Node" "Install P-Manager" "Install vpn-ui Panel" "Install SNI Proxy" "Uninstall a service" "Exit"; do
 		case $REPLY in
 			1) install_docker; break ;;
 			2) install_softether; break ;;
@@ -512,8 +672,9 @@ while true; do
 			7) install_pmanager; break ;;
 			8) install_vpnui; break ;;
 			9) install_sniproxy; break ;;
-			10) info "Have a nice day :)"; exit 0 ;;
-			*) error "Invalid option. Pick 1-10." ;;
+			10) uninstall_menu; break ;;
+			11) info "Have a nice day :)"; exit 0 ;;
+			*) error "Invalid option. Pick 1-11." ;;
 		esac
 	done
 done

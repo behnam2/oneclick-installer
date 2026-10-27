@@ -43,10 +43,15 @@ Then pick an option from the menu:
 7) Install P-Manager
 8) Install vpn-ui Panel
 9) Install SNI Proxy
-10) Exit
+10) Uninstall a service
+11) Exit
 ```
 
 **Navigation tips:** at any input prompt, type `b` to go **back** (cancel the current installer) or `q` to **quit** the script. Sub-menus (like v2ray role selection) also have their own **Back** and **Quit** entries. Empty answers fall back to the shown default.
+
+### Uninstalling
+
+Option **10** opens an uninstall menu. It removes instances created by this script (v2ray / Squid / SNI Proxy — including their Docker containers, volumes, networks and generated config folders) as well as system services (SoftEther, IPsec, P-Node, P-Manager, vpn-ui). Docker itself is left installed.
 
 ## v2ray: Bridge & Upstream Architecture
 
