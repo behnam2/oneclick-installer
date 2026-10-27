@@ -121,7 +121,7 @@ The generated `.env` file (mode `600`) contains your credentials — keep it pri
 
 Choose **Install IPsec VPN** to deploy an IPsec/L2TP and IKEv2 server using the well-known [hwdsl2/setup-ipsec-vpn](https://github.com/hwdsl2/setup-ipsec-vpn) script.
 
-The script optionally asks for a PSK, username and password — leave any of them empty to auto-generate random credentials. Credentials are printed at the end of the installation; save them.
+The script optionally asks for a PSK, username and password — leave any of them empty to auto-generate random credentials. It also asks for a **Libreswan version** — leave empty for the latest supported one, or pin a specific version (must be **4.15+**; older values are rejected). Credentials are printed at the end of the installation; save them.
 
 Client setup guides: see the upstream repo's README.
 

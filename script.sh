@@ -343,14 +343,27 @@ function install_ipsec {
 	sudocheck
 
 	step "Installing IPsec/L2TP & IKEv2 VPN (hwdsl2/setup-ipsec-vpn)"
-	local VPN_IPSEC_PSK VPN_USER VPN_PASSWORD
+	local VPN_IPSEC_PSK VPN_USER VPN_PASSWORD VPN_SWAN_VER
 	ask VPN_IPSEC_PSK "IPsec PSK (empty = random)" "" || { warn "Cancelled."; return 1; }
 	ask VPN_USER      "VPN username (empty = random)" "" || { warn "Cancelled."; return 1; }
 	read -r -s -p "VPN password (empty = random, input hidden): " VPN_PASSWORD
 	echo ""
 	stty sane 2>/dev/null || true   # restore terminal echo after hidden input
+	ask VPN_SWAN_VER  "Libreswan version (empty = latest supported, e.g. 4.15)" "" || { warn "Cancelled."; return 1; }
 
-	export VPN_IPSEC_PSK VPN_USER VPN_PASSWORD
+	# validate the version if the user gave one (upstream requires 4.15+)
+	if [ -n "$VPN_SWAN_VER" ]; then
+		if ! printf '%s\n%s\n' "4.15" "$VPN_SWAN_VER" | sort -C -V; then
+			warn "Libreswan version '$VPN_SWAN_VER' is too old (must be 4.15+)."
+			if ! confirm "Use the latest supported version instead?"; then
+				warn "Cancelled."
+				return 1
+			fi
+			VPN_SWAN_VER=""
+		fi
+	fi
+
+	export VPN_IPSEC_PSK VPN_USER VPN_PASSWORD VPN_SWAN_VER
 	wget -q https://get.vpnsetup.net -O /tmp/vpnsetup.sh
 	# run in a subshell so the upstream script's 'exit' doesn't kill our script
 	( sh /tmp/vpnsetup.sh ) || warn "The IPsec installer reported a non-zero status."
