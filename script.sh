@@ -262,7 +262,7 @@ function install_v2ray {
 
 	while true; do
 		step "v2ray — choose a role"
-		select role in "Bridge-server (Iran/entry)" "Upstream-server (exit)" "Back to main menu" "Quit"; do
+		select role in "Bridge server (Iran — entry node)" "Upstream server (foreign — exit node)" "Back to main menu" "Quit"; do
 			case $REPLY in
 				1) install_v2ray_bridge; break ;;
 				2) install_v2ray_upstream; break ;;
