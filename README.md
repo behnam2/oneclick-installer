@@ -15,6 +15,7 @@ A single interactive Bash script to set up your own VPN server with one command 
 | **P-Manager** | Web-based Xray/SSH proxy management panel via [miladrahimi/p-manager](https://github.com/miladrahimi/p-manager) |
 | **vpn-ui Panel** | Multi-protocol VPN panel via [Sir-MmD/vpn-ui](https://github.com/Sir-MmD/vpn-ui) |
 | **SNI Proxy** | DNS-based sanctions bypass (dnsmasq + sniproxy + dnsproxy + xray), inspired by [shervinamd/sni-proxy](https://github.com/shervinamd/sni-proxy) |
+| **MTProto (Telegram) Proxy** | Lightweight Telegram MTProto proxy with FakeTLS via [9seconds/mtg](https://github.com/9seconds/mtg) |
 
 ## Requirements
 
@@ -43,8 +44,9 @@ Then pick an option from the menu:
 7) Install P-Manager
 8) Install vpn-ui Panel
 9) Install SNI Proxy
-10) Uninstall a service
-11) Exit
+10) Install MTProto (Telegram) Proxy
+11) Uninstall a service
+12) Exit
 ```
 
 **Navigation tips:** at any input prompt, type `b` to go **back** (cancel the current installer) or `q` to **quit** the script. Sub-menus (like v2ray role selection) also have their own **Back** and **Quit** entries. Empty answers fall back to the shown default.
@@ -57,7 +59,7 @@ Option **10** opens an uninstall menu. Wherever the upstream project ships an of
 - **P-Node / P-Manager** → their own `make uninstall`
 - **vpn-ui** → `/opt/vpn-ui/vpn-ui-amd64 --uninstall`
 - **SoftEther** → stops/disables the service, removes the init script and `/usr/local/vpnserver` (upstream ships no uninstaller)
-- **v2ray / Squid / SNI Proxy** (created by this script) → `docker compose down`, remove networks, volumes and generated config folders
+- **v2ray / Squid / SNI Proxy / MTProto** (created by this script) → `docker compose down`, remove networks, volumes and generated config folders
 
 Docker itself is left installed.
 
@@ -182,6 +184,27 @@ The script asks for:
 It then generates the Xray outbound config, creates an isolated Docker network (`<name>-net`, `192.168.25.0/24`), and starts three containers: `xray` (SOCKS outbound), `dnsproxy` (DoH upstream) and `sni` (dnsmasq + sniproxy on ports 53/80/443).
 
 After installation, point your clients' DNS to the server IP.
+
+## MTProto (Telegram) Proxy
+
+Choose **Install MTProto (Telegram) Proxy** to deploy a lightweight Telegram MTProto proxy using [9seconds/mtg](https://github.com/9seconds/mtg). The script asks for:
+
+| Prompt | Default | Description |
+|---|---|---|
+| **Listen port** | `443` | The port clients connect to |
+| **Camouflage/fronting domain** | `cloudflare.com` | Domain used to generate the FakeTLS secret (pick one related to your server's IP/ASN for best stealth) |
+| **Instance name** | `mtproto` | Container + config folder name (`mtproto/<name>/`) |
+| **Public IP** | Auto-detected | IP embedded in the share link |
+
+After setup it prints a ready-to-open Telegram share link (and the `tg://` link) plus the generated FakeTLS secret. Configs live in `mtproto/<name>/` (`.env` and `config.toml` are `chmod 600`). For QR codes and more links: `docker exec <name> /mtg access /config.toml`.
+
+Manage it:
+
+```bash
+cd mtproto/mtproto
+docker compose logs -f
+docker compose down
+```
 
 ## Notes & Security
 

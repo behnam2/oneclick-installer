@@ -495,6 +495,104 @@ function install_sniproxy {
 	info "Manage: cd $dir && docker compose logs -f"
 }
 
+function install_mtproto {
+	sudocheck
+	require_docker || return 1
+
+	step "Setting up Telegram MTProto proxy (9seconds/mtg)"
+	info "A lightweight, censorship-resistant MTProto proxy with FakeTLS."
+	echo ""
+
+	local MTG_PORT MTG_DOMAIN name default_ip PUBLIC_IP
+	default_ip="$(hostname -I | awk '{print $1}')"
+	ask MTG_PORT   "Proxy listen port" "443" || { warn "Cancelled."; return 1; }
+	ask MTG_DOMAIN "Camouflage/fronting domain (e.g. cloudflare.com, google.com)" "cloudflare.com" || { warn "Cancelled."; return 1; }
+	ask name       "Instance name" "mtproto" || { warn "Cancelled."; return 1; }
+	ask PUBLIC_IP  "Public IP shown in share links" "$default_ip" || { warn "Cancelled."; return 1; }
+
+	# validate port
+	if ! [[ "$MTG_PORT" =~ ^[0-9]+$ ]] || [ "$MTG_PORT" -lt 1 ] || [ "$MTG_PORT" -gt 65535 ]; then
+		error "Invalid port: $MTG_PORT"
+		return 1
+	fi
+
+	local MTG_IMAGE="nineseconds/mtg:2.2.8"
+
+	step "Generating FakeTLS secret for domain '$MTG_DOMAIN'"
+	local MTG_SECRET
+	MTG_SECRET="$(docker run --rm "$MTG_IMAGE" generate-secret --hex "$MTG_DOMAIN" 2>/dev/null | tr -d '[:space:]')"
+	if [ -z "$MTG_SECRET" ]; then
+		error "Failed to generate a secret. Check your internet/Docker Hub access."
+		return 1
+	fi
+	success "Secret generated"
+
+	local dir="$SCRIPT_DIR/mtproto/$name"
+	mkdir -p "$dir"
+
+	cat > "$dir/config.toml" << EOF
+# mtg (MTProto proxy) configuration
+# docs: https://github.com/9seconds/mtg
+secret = "$MTG_SECRET"
+bind-to = "0.0.0.0:3128"
+
+# Blocklist includes RFC1918 bogons — disable it so local clients can connect.
+[defense.blocklist]
+enabled = false
+EOF
+
+	cat > "$dir/docker-compose.yml" << EOF
+services:
+  mtg:
+    image: ${MTG_IMAGE}
+    container_name: ${name}
+    restart: unless-stopped
+    command: run /config.toml
+    ports:
+      - "${MTG_PORT}:3128"
+    volumes:
+      - ./config.toml:/config.toml:ro
+    healthcheck:
+      test: ["CMD", "/mtg", "doctor", "/config.toml"]
+      interval: 60s
+      timeout: 15s
+      retries: 3
+      start_period: 10s
+EOF
+
+	# keep credentials private
+	{
+		echo "MTG_PORT=$MTG_PORT"
+		echo "MTG_DOMAIN=$MTG_DOMAIN"
+		echo "MTG_SECRET=$MTG_SECRET"
+		echo "PUBLIC_IP=$PUBLIC_IP"
+	} > "$dir/.env"
+	chmod 600 "$dir/.env" "$dir/config.toml"
+
+	step "Starting container"
+	pushd "$dir" > /dev/null
+	docker compose up -d
+	popd > /dev/null
+
+	# build share links
+	local tg_base="https://t.me/proxy?server=${PUBLIC_IP}&port=${MTG_PORT}&secret=${MTG_SECRET}"
+
+	echo ""
+	success "MTProto proxy '$name' is up on port $MTG_PORT!"
+	echo ""
+	echo "  ${C_CYN}Share link (Telegram):${C_RST}"
+	echo "  $tg_base"
+	echo ""
+	echo "  ${C_CYN}Direct tg:// link:${C_RST}"
+	echo "  tg://proxy?server=${PUBLIC_IP}&port=${MTG_PORT}&secret=${MTG_SECRET}"
+	echo ""
+	echo "  Secret (hex): $MTG_SECRET"
+	echo "  Domain front: $MTG_DOMAIN"
+	echo ""
+	info "Manage: cd $dir && docker compose logs -f"
+	info "More links/QR: docker exec $name /mtg access /config.toml"
+}
+
 # ---------- Uninstallers ----------
 function uninstall_v2ray {
 	sudocheck
@@ -636,6 +734,27 @@ function uninstall_pnode {
 	[ "$found" = "0" ] && info "No p-node installations found (searched /opt, /root, \$HOME, cwd)."
 }
 
+function uninstall_mtproto {
+	sudocheck
+	require_docker || return 1
+
+	local found=0 d
+	for d in "$SCRIPT_DIR"/mtproto/*/; do
+		[ -d "$d" ] || continue
+		found=1
+		local name
+		name="$(basename "$d")"
+		if confirm "Remove MTProto proxy '$name'?"; then
+			pushd "$d" > /dev/null
+			docker compose down 2>/dev/null || true
+			popd > /dev/null
+			rm -rf "$d"
+			success "Removed MTProto proxy '$name'"
+		fi
+	done
+	[ "$found" = "0" ] && info "No MTProto proxy instances found."
+}
+
 function uninstall_vpnui {
 	sudocheck
 
@@ -652,19 +771,20 @@ function uninstall_vpnui {
 function uninstall_menu {
 	while true; do
 		step "Uninstall — choose a service"
-		select u in "v2ray instances" "Squid instances" "SNI Proxy instances" "SoftEther VPN" "IPsec VPN" "P-Manager" "P-Node" "vpn-ui Panel" "Back to main menu" "Quit"; do
+		select u in "v2ray instances" "Squid instances" "SNI Proxy instances" "MTProto proxy instances" "SoftEther VPN" "IPsec VPN" "P-Manager" "P-Node" "vpn-ui Panel" "Back to main menu" "Quit"; do
 			case $REPLY in
 				1) uninstall_v2ray; break ;;
 				2) uninstall_squid; break ;;
 				3) uninstall_sniproxy; break ;;
-				4) uninstall_softether; break ;;
-				5) uninstall_ipsec; break ;;
-				6) uninstall_pmanager; break ;;
-				7) uninstall_pnode; break ;;
-				8) uninstall_vpnui; break ;;
-				9) return 0 ;;
-				10) info "Goodbye!"; exit 0 ;;
-				*) error "Invalid option. Pick 1-10." ;;
+				4) uninstall_mtproto; break ;;
+				5) uninstall_softether; break ;;
+				6) uninstall_ipsec; break ;;
+				7) uninstall_pmanager; break ;;
+				8) uninstall_pnode; break ;;
+				9) uninstall_vpnui; break ;;
+				10) return 0 ;;
+				11) info "Goodbye!"; exit 0 ;;
+				*) error "Invalid option. Pick 1-11." ;;
 			esac
 		done
 	done
@@ -676,7 +796,7 @@ echo "${C_CYN}=== OneClick Installer ===${C_RST}"
 info "Pick an option. Inside prompts: 'b' = back, 'q' = quit."
 while true; do
 	echo ""
-	select option in "Install Docker" "Install SoftEther" "Install v2ray" "Install Squid Proxy" "Install IPsec VPN" "Install P-Node" "Install P-Manager" "Install vpn-ui Panel" "Install SNI Proxy" "Uninstall a service" "Exit"; do
+	select option in "Install Docker" "Install SoftEther" "Install v2ray" "Install Squid Proxy" "Install IPsec VPN" "Install P-Node" "Install P-Manager" "Install vpn-ui Panel" "Install SNI Proxy" "Install MTProto (Telegram) Proxy" "Uninstall a service" "Exit"; do
 		case $REPLY in
 			1) install_docker; break ;;
 			2) install_softether; break ;;
@@ -687,9 +807,10 @@ while true; do
 			7) install_pmanager; break ;;
 			8) install_vpnui; break ;;
 			9) install_sniproxy; break ;;
-			10) uninstall_menu; break ;;
-			11) info "Have a nice day :)"; exit 0 ;;
-			*) error "Invalid option. Pick 1-11." ;;
+			10) install_mtproto; break ;;
+			11) uninstall_menu; break ;;
+			12) info "Have a nice day :)"; exit 0 ;;
+			*) error "Invalid option. Pick 1-12." ;;
 		esac
 	done
 done
