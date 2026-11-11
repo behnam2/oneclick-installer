@@ -10,12 +10,18 @@ A single interactive Bash script to set up your own VPN server with one command 
 | **SoftEther VPN** | SoftEther VPN Server (x86_64), compiled and installed as a systemd service |
 | **v2ray** | Containerized V2Ray in two roles: **Bridge** (entry server, e.g. in Iran) and **Upstream** (exit server abroad) |
 | **Squid Proxy** | Containerized Squid forward proxy with basic auth, IP allowlist and optional upstream chaining |
-| **IPsec VPN** | IPsec/L2TP & IKEv2 server via [hwdsl2/setup-ipsec-vpn](https://github.com/hwdsl2/setup-ipsec-vpn) |
-| **P-Node** | Xray/SSH node agent via [miladrahimi/p-node](https://github.com/miladrahimi/p-node) |
-| **P-Manager** | Web-based Xray/SSH proxy management panel via [miladrahimi/p-manager](https://github.com/miladrahimi/p-manager) |
-| **vpn-ui Panel** | Multi-protocol VPN panel via [Sir-MmD/vpn-ui](https://github.com/Sir-MmD/vpn-ui) |
-| **SNI Proxy** | DNS-based sanctions bypass (dnsmasq + sniproxy + dnsproxy + xray), inspired by [shervinamd/sni-proxy](https://github.com/shervinamd/sni-proxy) |
-| **MTProto (Telegram) Proxy** | Lightweight Telegram MTProto proxy with FakeTLS via [9seconds/mtg](https://github.com/9seconds/mtg) |
+| **IPsec VPN** | IPsec/L2TP & IKEv2 server with bundled setup and removal scripts |
+| **P-Node** | Xray/SSH node agent with bundled runtime |
+| **P-Manager** | Web-based Xray/SSH proxy management panel with bundled runtime |
+| **vpn-ui Panel** | Multi-protocol VPN panel with bundled deployment script |
+| **SNI Proxy** | DNS-based sanctions bypass (dnsmasq + sniproxy + dnsproxy + xray) |
+| **MTProto (Telegram) Proxy** | Lightweight Telegram MTProto proxy with FakeTLS |
+
+## Repository layout
+
+The installer is self-contained: V2Ray and SNI configuration templates are embedded in `script.sh`, while the IPsec, P-Node, P-Manager and vpn-ui bundles live beside it. No upstream repository is cloned during installation.
+
+The same service sources are also maintained as separate private repositories. Generated deployments are written only when you run an installer and are ignored by Git.
 
 ## Requirements
 
@@ -53,9 +59,9 @@ Then pick an option from the menu:
 
 ### Uninstalling
 
-Option **10** opens an uninstall menu. Wherever the upstream project ships an official uninstaller, we use it so removal is complete and safe:
+Option **11** opens an uninstall menu. Each service is removed with its bundled uninstaller or its generated Docker Compose project:
 
-- **IPsec VPN** → official `vpnuninstall.sh` (hwdsl2), with a package-removal fallback
+- **IPsec VPN** → bundled `vpnuninstall.sh`, with a package-removal fallback
 - **P-Node / P-Manager** → their own `make uninstall`
 - **vpn-ui** → `/opt/vpn-ui/vpn-ui-amd64 --uninstall`
 - **SoftEther** → stops/disables the service, removes the init script and `/usr/local/vpnserver` (upstream ships no uninstaller)
@@ -134,33 +140,33 @@ The generated `.env` file (mode `600`) contains your credentials — keep it pri
 
 ## IPsec VPN
 
-Choose **Install IPsec VPN** to deploy an IPsec/L2TP and IKEv2 server using the well-known [hwdsl2/setup-ipsec-vpn](https://github.com/hwdsl2/setup-ipsec-vpn) script.
+Choose **Install IPsec VPN** to deploy an IPsec/L2TP and IKEv2 server using the bundled setup script.
 
 The script optionally asks for a PSK, username and password — leave any of them empty to auto-generate random credentials. It also asks for a **Libreswan version** — leave empty for the latest supported one, or pin a specific version (must be **4.15+**; older values are rejected). Credentials are printed at the end of the installation; save them.
 
-Client setup guides: see the upstream repo's README.
+The setup script prints the generated credentials and client connection details when it finishes.
 
 ## P-Node & P-Manager
 
-These two work together — [P-Manager](https://github.com/miladrahimi/p-manager) is the central web panel, [P-Node](https://github.com/miladrahimi/p-node) is the agent you install on each node server.
+These two work together: P-Manager is the central web panel and P-Node is the agent installed on each node server.
 
 ### P-Node (option 6)
 
-Installs via the official one-line installer. At the end it prints JSON blobs (Full / Xray-only / SSH-only) — paste the matching one into P-Manager's **Add Node** input.
+Installs the bundled runtime into the next available `/opt/p-node-N` directory. At the end it prints JSON blobs (Full / Xray-only / SSH-only) — paste the matching one into P-Manager's **Add Node** input.
 
 ### P-Manager (option 7)
 
-Clones the repo into `/opt/p-manager` (customizable) and runs `make setup`. Then:
+Copies the bundled runtime into `/opt/p-manager` (customizable) and runs its setup script. Then:
 
 - Admin panel: `http://<server>:8080`
 - Default credentials: `admin` / `password` — **change immediately**
 - Config file: `/opt/p-manager/configs/main.json`
 
-If the directory already exists, the option runs `make update` instead.
+If the directory already exists, the option re-runs its setup script instead.
 
 ## vpn-ui Panel
 
-Choose **Install vpn-ui Panel** to deploy [Sir-MmD/vpn-ui](https://github.com/Sir-MmD/vpn-ui) — a multi-protocol panel (L2TP/IPsec, PPTP, OpenVPN, OpenConnect, SSTP, IKEv2, WireGuard, AmneziaWG, MTProto, SSH tunnel, GRE) via the official `deploy.sh`.
+Choose **Install vpn-ui Panel** to deploy a multi-protocol panel (L2TP/IPsec, PPTP, OpenVPN, OpenConnect, SSTP, IKEv2, WireGuard, AmneziaWG, MTProto, SSH tunnel, GRE) via the bundled deployment script.
 
 After installation, run `vpn-ui` for the management menu. Uninstall with:
 
@@ -170,7 +176,7 @@ sudo /opt/vpn-ui/vpn-ui-amd64 --uninstall
 
 ## SNI Proxy
 
-Choose **Install SNI Proxy** to set up DNS-based sanctions bypass, inspired by [shervinamd/sni-proxy](https://github.com/shervinamd/sni-proxy). Client devices just change their DNS to this server — no apps needed.
+Choose **Install SNI Proxy** to set up DNS-based sanctions bypass. Client devices just change their DNS to this server — no apps needed.
 
 The script asks for:
 
@@ -187,7 +193,7 @@ After installation, point your clients' DNS to the server IP.
 
 ## MTProto (Telegram) Proxy
 
-Choose **Install MTProto (Telegram) Proxy** to deploy a lightweight Telegram MTProto proxy using [9seconds/mtg](https://github.com/9seconds/mtg). The script asks for:
+Choose **Install MTProto (Telegram) Proxy** to deploy a lightweight Telegram MTProto proxy. The script asks for:
 
 | Prompt | Default | Description |
 |---|---|---|
@@ -212,7 +218,7 @@ docker compose down
 - The SoftEther installer downloads a pinned binary (`v4.38-9760`) from this account's `Needed-Files` repo.
 - When you select "server is in Iran" during Docker installation, the script temporarily prepends the [Shecan](https://shecan.ir) DNS resolver to work around Docker Hub sanctions; your original `resolv.conf` is backed up to `/etc/resolv.conf.bak`.
 - Generated instance folders and logs are gitignored — keep your UUIDs and passwords private.
-- The V2Ray images use `b3hnam/v2ray:v4.45.2` (V2Ray 4.x core).
+- Docker images are pinned under the `b3hnam` registry namespace. Third-party license notices are retained in the corresponding bundled directories.
 
 ## Roadmap
 

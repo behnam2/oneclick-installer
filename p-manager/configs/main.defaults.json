@@ -1,0 +1,24 @@
+{
+  "http_server": {
+    "host": "0.0.0.0",
+    "port": 8080
+  },
+  "http_client": {
+    "timeout": 30
+  },
+  "xray": {
+    "log_level": "warning"
+  },
+  "logger": {
+    "level": "warn",
+    "format": "2006-01-02 15:04:05.000"
+  },
+  "paqet": {
+    "interface": "",
+    "address": "",
+    "router_mac": ""
+  },
+  "cloudflare": {
+    "base_url": ""
+  }
+}

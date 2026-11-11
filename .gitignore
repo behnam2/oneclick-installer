@@ -19,3 +19,9 @@ v2ray/*/logs/*.log
 # OS junk
 .DS_Store
 __pycache__/
+
+# Bundled runtime generated state
+p-node/storage/
+p-manager/storage/
+p-manager/configs/main.json
+p-node/configs/main.json
